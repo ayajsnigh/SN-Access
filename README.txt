@@ -9,7 +9,7 @@ Install (Chrome or Edge)
 Use
 1. Open any ServiceNow form (or list) in an instance where you are admin or security_admin.
 2. Click the extension icon. The panel opens with the table and record already filled in.
-3. Pick the user, the operation and, optionally, a field, then press "Check access".
+3. Pick the user, tick one or more operations (read, write, create, delete) and, optionally, a field, then press "Check access". Each operation gets its own block; blocked ones open automatically.
 4. Click the icon again to close the panel.
 
 It works on any instance domain, because it only runs on the tab where you click the icon.
