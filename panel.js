@@ -154,6 +154,14 @@
     'label small{font-weight:400;color:#5b6675}',
     'input,select{font:inherit;padding:6px 8px;border:1px solid #b9c1cc;border-radius:5px;background:#fff;color:#18202b;min-width:0}',
     'input:focus-visible,select:focus-visible,.go:focus-visible,a:focus-visible,.copy:focus-visible{outline:2px solid #1f4e5f;outline-offset:1px}',
+    'input[type=checkbox]{padding:0;width:15px;height:15px;accent-color:#1f4e5f}',
+    'fieldset.ops{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;padding:4px 10px 8px;border:1px solid #b9c1cc;border-radius:5px;background:#fff}',
+    'legend{font-weight:600;font-size:12px;padding:0 4px}',
+    '.chk{display:flex;align-items:center;gap:5px;font-weight:400;font-size:13px}',
+    'details.op{border:1px solid #d5dae1;border-left-width:5px;border-radius:6px;background:#fff}',
+    'details.op>summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px}',
+    'details.op>summary:focus-visible{outline:2px solid #1f4e5f;outline-offset:-2px}',
+    '.opbody{padding:0 10px 10px;display:grid;gap:10px}',
     '.go{font:inherit;font-weight:600;padding:8px 10px;border:0;border-radius:5px;background:#1f4e5f;color:#fff;cursor:pointer}',
     '.go:hover{background:#17404f}',
     '.out{padding:12px 14px;display:grid;gap:12px}',
@@ -191,7 +199,14 @@
   var users = {};
   var uIn = h('input', { id: 'u', list: 'ul', autocomplete: 'off', placeholder: 'Type a name to search' });
   var tIn = h('input', { id: 't', value: ctx.table, autocomplete: 'off', placeholder: 'e.g. incident' });
-  var oSel = h('select', { id: 'o' }, ['read', 'write', 'create', 'delete'].map(function (v) { return h('option', { value: v, text: v }); }));
+  var OPS = ['read', 'write', 'create', 'delete'];
+  var oBox = h('fieldset', { class: 'ops' }, [h('legend', { text: 'Operations' })].concat(OPS.map(function (v) {
+    return h('label', { class: 'chk' }, [h('input', { type: 'checkbox', value: v, checked: '' }), v]);
+  })));
+  function selectedOps() {
+    return Array.prototype.filter.call(oBox.querySelectorAll('input'), function (i) { return i.checked; })
+      .map(function (i) { return i.value; });
+  }
   var fIn = h('input', { id: 'f', list: 'fl', autocomplete: 'off', placeholder: 'Leave empty for table access only' });
   var rIn = h('input', { id: 'r', value: ctx.sysId, autocomplete: 'off', placeholder: '32-character sys_id' });
   var uList = h('datalist', { id: 'ul' });
@@ -206,7 +221,7 @@
     ]),
     h('div', { class: 'form' }, [
       h('label', {}, ['User', uIn]), uList,
-      h('div', { class: 'two' }, [h('label', {}, ['Table', tIn]), h('label', {}, ['Operation', oSel])]),
+      h('label', {}, ['Table', tIn]), oBox,
       h('label', {}, [h('span', {}, ['Field ', h('small', { text: '(optional)' })]), fIn]), fList,
       h('label', {}, [h('span', {}, ['Record sys_id ', h('small', { text: '(needed to test conditions)' })]), rIn]),
       h('button', { class: 'go', text: 'Check access', onclick: run })
@@ -327,29 +342,45 @@
     unknown: ['No matching table ACL', 'The instance default deny setting decides.']
   };
 
-  function render(result, meta, fixes) {
-    var v = VERDICT[result.verdict];
-    var kids = [
-      h('div', { class: 'verdict v-' + result.verdict }, [
-        h('b', { text: v[0] }),
-        h('span', { text: meta.userLabel + ' \u00b7 ' + meta.op + ' on ' + meta.table + (meta.field ? '.' + meta.field : '') }),
-        h('div', { text: v[1] })
-      ]),
-      scopeBlock('Table access', result.record, 'No ACL matches this table, so default deny applies.')
-    ];
-    if (result.field) kids.push(scopeBlock('Field access (' + meta.field + ')', result.field, 'No field ACL matches. Table access alone applies.'));
-
-    var lines = [v[0] + ': ' + meta.userLabel + ', ' + meta.op + ' on ' + meta.table + (meta.field ? '.' + meta.field : '')];
-    if (fixes.length) {
+  function opBlock(r, meta) {
+    var v = VERDICT[r.result.verdict];
+    var body = h('div', { class: 'opbody' }, [
+      h('p', { class: 'muted', text: v[1] }),
+      scopeBlock('Table access', r.result.record, 'No ACL matches this table, so default deny applies.')
+    ]);
+    if (r.result.field) body.appendChild(scopeBlock('Field access (' + meta.field + ')', r.result.field, 'No field ACL matches. Table access alone applies.'));
+    if (r.fixes.length) {
       var box = h('div', { class: 'fix' }, [h('h3', { text: 'How to get access (any one route is enough)' })]);
-      fixes.forEach(function (f) {
-        lines.push('Route via ACL ' + f.acl.name + ' (' + f.acl.id + '):');
+      r.fixes.forEach(function (f) {
         box.appendChild(h('p', {}, ['Via ', h('span', { class: 'm', text: f.acl.name }), ':']));
-        box.appendChild(h('ul', {}, f.steps.map(function (s) { lines.push('  - ' + s); return h('li', { text: s }); })));
+        box.appendChild(h('ul', {}, f.steps.map(function (s) { return h('li', { text: s }); })));
       });
-      kids.push(box);
+      body.appendChild(box);
     }
-    lastSummary = lines.join('\n');
+    var d = h('details', { class: 'op v-' + r.result.verdict }, [
+      h('summary', {}, [h('b', { text: r.op }), h('span', { text: v[0] })]),
+      body
+    ]);
+    if (r.result.verdict !== 'allowed') d.open = true;
+    return d;
+  }
+
+  function summaryText(results, meta) {
+    var lines = [meta.userLabel + ' on ' + meta.table + (meta.field ? '.' + meta.field : '')];
+    results.forEach(function (r) {
+      lines.push(r.op + ': ' + VERDICT[r.result.verdict][0]);
+      r.fixes.forEach(function (f) {
+        lines.push('  Route via ACL ' + f.acl.name + ' (' + f.acl.id + '):');
+        f.steps.forEach(function (s) { lines.push('    - ' + s); });
+      });
+    });
+    return lines.join('\n');
+  }
+
+  function render(results, meta) {
+    var kids = [h('p', { class: 'muted', text: meta.userLabel + ' \u00b7 ' + meta.table + (meta.field ? '.' + meta.field : '') })];
+    results.forEach(function (r) { kids.push(opBlock(r, meta)); });
+    lastSummary = summaryText(results, meta);
     kids.push(h('button', {
       class: 'copy', text: 'Copy summary',
       onclick: function (ev) {
@@ -364,18 +395,20 @@
   async function run() {
     out.replaceChildren(h('p', { class: 'muted', text: 'Checking\u2026' }));
     try {
-      var table = tIn.value.trim(), field = fIn.value.trim(), op = oSel.value, sysId = rIn.value.trim();
+      var table = tIn.value.trim(), field = fIn.value.trim(), sysId = rIn.value.trim();
+      var ops = selectedOps();
       var userId = users[uIn.value];
       if (!userId) throw new Error('Pick a user from the list.');
       if (!table) throw new Error('Enter a table name.');
+      if (!ops.length) throw new Error('Select at least one operation.');
       var chain = await tableChain(table);
       if (!chain.length) throw new Error('Table "' + table + '" was not found.');
 
       var plan = L.buildLevels(chain, field);
       var names = plan.record.concat(plan.field);
       var acls = await rows('sys_security_acl',
-        'nameIN' + names.join(',') + '^operation.name=' + op + '^active=true^type.name=record',
-        'sys_id,name,condition,advanced,admin_overrides', 1000);
+        'nameIN' + names.join(',') + '^operation.nameIN' + ops.join(',') + '^active=true^type.name=record',
+        'sys_id,name,operation.name,condition,advanced,admin_overrides', 2000);
       var roles = await userRoles(userId);
       var isSelf = !!self && userId === self.id;
 
@@ -383,18 +416,26 @@
         var need = await aclRoles(a.sys_id);
         var c = await evalCond(table, sysId, a.condition, isSelf);
         return L.evalAcl({
-          id: a.sys_id, name: a.name, condition: a.condition,
+          id: a.sys_id, name: a.name, op: a['operation.name'], condition: a.condition,
           hasScript: a.advanced === 'true', adminOv: a.admin_overrides === 'true',
           need: need, condOk: c.ok, condNote: c.note
         }, roles);
       }));
 
-      var result = L.decide(plan, evaluated);
-      for (var s of [result.record, result.field]) {
-        if (!s || s.decidedIdx < 0) continue;
-        for (var e of s.levels[s.decidedIdx].acls) { if (sysId) await diagnose(table, sysId, e); }
+      var results = [];
+      for (var i = 0; i < ops.length; i++) {
+        var op = ops[i];
+        var result = L.decide(plan, evaluated.filter(function (e) { return e.op === op; }));
+        var scopes = [result.record, result.field];
+        for (var j = 0; j < scopes.length; j++) {
+          var s = scopes[j];
+          if (!s || s.decidedIdx < 0 || !sysId) continue;
+          var decided = s.levels[s.decidedIdx].acls;
+          for (var k = 0; k < decided.length; k++) await diagnose(table, sysId, decided[k]);
+        }
+        results.push({ op: op, result: result, fixes: fixesFor(result) });
       }
-      render(result, { userLabel: uIn.value.replace(/ \(you\)$/, ''), table: table, field: field, op: op }, fixesFor(result));
+      render(results, { userLabel: uIn.value.replace(/ \(you\)$/, ''), table: table, field: field });
       if (!acls.length) out.appendChild(h('p', { class: 'muted', text: 'No ACL rows were returned. If you expected some, this session may lack read access to sys_security_acl.' }));
     } catch (e) {
       out.replaceChildren(h('p', { class: 'err', text: e.message }));
